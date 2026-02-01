@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/buttons";
 import { useToasts } from "@/components/ui/toasts";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { pushToast } = useToasts();
@@ -82,5 +82,26 @@ export default function LoginPage() {
         </div>
       </GlassCard>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center px-6 sm:px-10">
+          <GlassCard className="glass-panel-strong w-full max-w-[520px]">
+            <div className="flex flex-col gap-4">
+              <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                Sign in
+              </p>
+              <p className="text-sm text-[var(--text-1)]">Loading…</p>
+            </div>
+          </GlassCard>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

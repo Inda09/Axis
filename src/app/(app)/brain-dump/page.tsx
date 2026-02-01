@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -28,12 +28,24 @@ const NOTE_COLORS: Array<BrainDumpBoardItem["color"]> = [
   "slate",
 ];
 
+const BrainDumpCanvas = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  function BrainDumpCanvas({ children, ...props }, ref) {
+    return (
+      <div ref={ref} {...props}>
+        {children}
+      </div>
+    );
+  },
+);
+
 export default function BrainDumpPage() {
   const { mode, brainDumpByMode } = useAxisStore((state) => state);
   const actions = useAxisActions();
   const reduceMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const boardSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const activePointerId = useRef<number | null>(null);
+  const wheelTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [panning, setPanning] = useState<{
     startX: number;
     startY: number;
@@ -59,6 +71,8 @@ export default function BrainDumpPage() {
     "medium",
   );
   const [drawMode, setDrawMode] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [isPointerInside, setIsPointerInside] = useState(false);
   const doodleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
@@ -160,6 +174,50 @@ export default function BrainDumpPage() {
   });
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      setIsInteracting(false);
+      setPanning(null);
+      setDraggingGroup(null);
+      setResizing(null);
+      if (activePointerId.current !== null && containerRef.current) {
+        try {
+          containerRef.current.releasePointerCapture(activePointerId.current);
+        } catch {
+          // ignore if capture was not set
+        }
+      }
+      activePointerId.current = null;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isInteracting) {
+      return;
+    }
+    const originalOverflow = document.body.style.overflow;
+    const originalOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.overscrollBehavior = originalOverscroll;
+    };
+  }, [isInteracting]);
+
+  useEffect(() => {
     const canvas = doodleCanvasRef.current;
     if (!canvas) {
       return;
@@ -186,20 +244,45 @@ export default function BrainDumpPage() {
   }, [board.doodleDataUrl]);
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!isPointerInside && !isInteracting) {
+      return;
+    }
     event.preventDefault();
+    event.stopPropagation();
+    if (activePointerId.current === null) {
+      setIsInteracting(true);
+      if (wheelTimeout.current) {
+        clearTimeout(wheelTimeout.current);
+      }
+      wheelTimeout.current = setTimeout(() => {
+        if (activePointerId.current === null) {
+          setIsInteracting(false);
+        }
+      }, 180);
+    }
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) {
       return;
     }
-    const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
-    const nextZoom = clamp(board.camera.zoom * zoomFactor, 0.5, 2.2);
-    const pointerX = event.clientX - rect.left;
-    const pointerY = event.clientY - rect.top;
-    const worldX = (pointerX - board.camera.x) / board.camera.zoom;
-    const worldY = (pointerY - board.camera.y) / board.camera.zoom;
-    const nextX = pointerX - worldX * nextZoom;
-    const nextY = pointerY - worldY * nextZoom;
-    actions.setBrainDumpCamera(mode, { x: nextX, y: nextY, zoom: nextZoom });
+    const shouldZoom = event.ctrlKey || event.metaKey;
+    if (shouldZoom) {
+      const zoomFactor = event.deltaY > 0 ? 0.92 : 1.08;
+      const nextZoom = clamp(board.camera.zoom * zoomFactor, 0.5, 2.2);
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+      const worldX = (pointerX - board.camera.x) / board.camera.zoom;
+      const worldY = (pointerY - board.camera.y) / board.camera.zoom;
+      const nextX = pointerX - worldX * nextZoom;
+      const nextY = pointerY - worldY * nextZoom;
+      actions.setBrainDumpCamera(mode, { x: nextX, y: nextY, zoom: nextZoom });
+      return;
+    }
+
+    actions.setBrainDumpCamera(mode, {
+      x: board.camera.x - event.deltaX,
+      y: board.camera.y - event.deltaY,
+      zoom: board.camera.zoom,
+    });
   };
 
   const snapValue = (value: number) =>
@@ -303,6 +386,17 @@ export default function BrainDumpPage() {
     };
   };
 
+  const beginInteraction = (event: React.PointerEvent<HTMLDivElement>) => {
+    setIsInteracting(true);
+    activePointerId.current = event.pointerId;
+    containerRef.current?.setPointerCapture(event.pointerId);
+  };
+
+  const endInteraction = () => {
+    setIsInteracting(false);
+    activePointerId.current = null;
+  };
+
   const exportPng = async () => {
     if (!containerRef.current) {
       return;
@@ -341,354 +435,406 @@ export default function BrainDumpPage() {
     pdf.save(`axis-brain-dump-${mode}.pdf`);
   };
 
+  const resetView = () => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    actions.setBrainDumpCamera(mode, {
+      x: rect.width / 2 - DOODLE_WIDTH / 2,
+      y: rect.height / 2 - DOODLE_HEIGHT / 2,
+      zoom: 1,
+    });
+  };
+
+  const zoomBy = (delta: number) => {
+    actions.setBrainDumpCamera(mode, {
+      x: board.camera.x,
+      y: board.camera.y,
+      zoom: clamp(board.camera.zoom + delta, 0.5, 2.2),
+    });
+  };
+
   return (
     <>
       <PageTransition>
-        <StaggerContainer>
-          <div className="flex flex-col gap-6">
-          <StaggerItem>
-            <ModeToggle value={mode} onChange={actions.setMode} />
-          </StaggerItem>
+        <div className="flex h-[calc(100vh-12rem)] flex-col gap-6 overflow-hidden lg:h-[calc(100vh-10rem)]">
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <StaggerContainer>
+              <div className="flex flex-1 flex-col gap-6 overflow-hidden">
+              <StaggerItem>
+                <ModeToggle value={mode} onChange={actions.setMode} />
+              </StaggerItem>
 
-          <StaggerItem>
-            <GlassCard className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                    Brain Dump Board
-                  </p>
-                  <p className="text-sm text-[var(--text-1)]">
-                    Paste screenshots or text, drag items, and zoom in/out.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={() => setNoteModalOpen(true)}
-                  >
-                    Add Note
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={() =>
-                      actions.setBrainDumpGrid(mode, {
-                        snapToGrid: !board.snapToGrid,
-                      })
-                    }
-                  >
-                    Snap {board.snapToGrid ? "On" : "Off"}
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={() => setDrawMode((prev) => !prev)}
-                  >
-                    Doodle {drawMode ? "On" : "Off"}
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={() => actions.setBrainDumpDoodle(mode, null)}
-                  >
-                    Clear Doodle
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={() =>
-                      actions.setBrainDumpCamera(mode, { x: 0, y: 0, zoom: 1 })
-                    }
-                  >
-                    Reset View
-                  </SecondaryButton>
-                  <PrimaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={() =>
-                      actions.setBrainDumpCamera(mode, {
-                        x: board.camera.x,
-                        y: board.camera.y,
-                        zoom: clamp(board.camera.zoom + 0.1, 0.5, 2.2),
-                      })
-                    }
-                  >
-                    Zoom In
-                  </PrimaryButton>
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={() =>
-                      actions.setBrainDumpCamera(mode, {
-                        x: board.camera.x,
-                        y: board.camera.y,
-                        zoom: clamp(board.camera.zoom - 0.1, 0.5, 2.2),
-                      })
-                    }
-                  >
-                    Zoom Out
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={exportPng}
-                  >
-                    Export PNG
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    className="w-auto px-4 py-2"
-                    onClick={exportPdf}
-                  >
-                    Export PDF
-                  </SecondaryButton>
-                </div>
-              </div>
-            </GlassCard>
-          </StaggerItem>
-
-          <StaggerItem>
-            <div
-              ref={containerRef}
-              onWheel={handleWheel}
-              onPointerDown={(event) => {
-                if (drawMode) {
-                  startDoodle(event.clientX, event.clientY);
-                  return;
-                }
-                const target = event.target as HTMLElement;
-                if (
-                  target.dataset.handle === "resize" ||
-                  target.closest('[data-item="true"]')
-                ) {
-                  return;
-                }
-                setSelectedIds([]);
-                setPanning({
-                  startX: event.clientX,
-                  startY: event.clientY,
-                  originX: board.camera.x,
-                  originY: board.camera.y,
-                });
-              }}
-              onPointerMove={(event) => {
-                if (drawMode) {
-                  drawDoodle(event.clientX, event.clientY);
-                  return;
-                }
-                if (resizing) {
-                  const point = screenToBoard(event.clientX, event.clientY);
-                  const nextWidth = clamp(
-                    resizing.startWidth + (point.x - resizing.startPoint.x),
-                    140,
-                    620,
-                  );
-                  const nextHeight = clamp(
-                    resizing.startHeight + (point.y - resizing.startPoint.y),
-                    120,
-                    620,
-                  );
-                  actions.updateBrainDumpBoardItem(mode, resizing.id, {
-                    width: snapValue(nextWidth),
-                    height: snapValue(nextHeight),
-                  });
-                } else if (draggingGroup) {
-                  const point = screenToBoard(event.clientX, event.clientY);
-                  const dx = point.x - draggingGroup.startPoint.x;
-                  const dy = point.y - draggingGroup.startPoint.y;
-                  draggingGroup.ids.forEach((id) => {
-                    const start = draggingGroup.positions[id];
-                    actions.updateBrainDumpBoardItem(mode, id, {
-                      x: start.x + dx,
-                      y: start.y + dy,
-                    });
-                  });
-                } else if (panning) {
-                  const dx = event.clientX - panning.startX;
-                  const dy = event.clientY - panning.startY;
-                  actions.setBrainDumpCamera(mode, {
-                    x: panning.originX + dx,
-                    y: panning.originY + dy,
-                    zoom: board.camera.zoom,
-                  });
-                }
-              }}
-              onPointerUp={() => {
-                if (drawMode) {
-                  endDoodle();
-                  return;
-                }
-                if (draggingGroup) {
-                  applySnapToSelection(draggingGroup.ids);
-                }
-                setPanning(null);
-                setDraggingGroup(null);
-                setResizing(null);
-              }}
-              onPointerLeave={() => {
-                if (drawMode) {
-                  endDoodle();
-                  return;
-                }
-                if (draggingGroup) {
-                  applySnapToSelection(draggingGroup.ids);
-                }
-                setPanning(null);
-                setDraggingGroup(null);
-                setResizing(null);
-              }}
-              className={`glass-panel relative h-[70vh] w-full overflow-hidden rounded-[var(--r-lg)] sm:h-[72vh] lg:h-[75vh] xl:h-[78vh] ${
-                board.snapToGrid ? "brain-grid" : ""
-              }`}
-            >
-              <div ref={boardSurfaceRef} className="absolute inset-0">
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      "radial-gradient(circle at 20% 20%, rgba(118,255,43,0.08), transparent 40%), radial-gradient(circle at 80% 10%, rgba(118,255,43,0.08), transparent 45%)",
-                  }}
-                />
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    transform: `translate(${board.camera.x}px, ${board.camera.y}px) scale(${board.camera.zoom})`,
-                    transformOrigin: "0 0",
-                  }}
-                >
-                  <canvas
-                    ref={doodleCanvasRef}
-                    className="absolute left-0 top-0"
-                    style={{ width: DOODLE_WIDTH, height: DOODLE_HEIGHT }}
-                  />
-                  <AnimatePresence initial={false}>
-                  {items.map((item) => {
-                    const isSelected = selectedSet.has(item.id);
-                    return (
-                      <motion.div
-                        key={item.id}
-                        data-item="true"
-                        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
-                        transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
-                        style={{
-                          position: "absolute",
-                          left: item.x,
-                          top: item.y,
-                          width: item.width,
-                          height: item.height,
-                          zIndex: item.zIndex,
-                        }}
-                        onPointerDown={(event) => {
-                          event.stopPropagation();
-                          const additive = event.shiftKey || event.metaKey || event.ctrlKey;
-                          const nextSelected = additive
-                            ? selectedSet.has(item.id)
-                              ? selectedIds.filter((entry) => entry !== item.id)
-                              : [...selectedIds, item.id]
-                            : [item.id];
-                          setSelectedIds(nextSelected);
-                          const point = screenToBoard(event.clientX, event.clientY);
-                          const ids = nextSelected.length > 0 ? nextSelected : [item.id];
-                          const positions = ids.reduce<Record<string, { x: number; y: number }>>(
-                            (acc, id) => {
-                              const entry = items.find((node) => node.id === id);
-                              if (entry) {
-                                acc[id] = { x: entry.x, y: entry.y };
-                              }
-                              return acc;
-                            },
-                            {},
-                          );
-                          setDraggingGroup({
-                            ids,
-                            startPoint: point,
-                            positions,
-                          });
-                          actions.updateBrainDumpBoardItem(mode, item.id, {
-                            zIndex: maxZ + 1,
-                          });
-                        }}
-                        className="group relative"
+              <StaggerItem>
+                <GlassCard className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                        Brain Dump Board
+                      </p>
+                      <p className="text-sm text-[var(--text-1)]">
+                        Paste screenshots or text, drag items, and zoom in/out.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SecondaryButton
+                        type="button"
+                        className="w-auto px-4 py-2"
+                        onClick={() => setNoteModalOpen(true)}
                       >
-                        <div
-                          className={`glass-panel-opaque flex h-full w-full flex-col gap-2 rounded-[var(--r-md)] p-3 ${
-                            isSelected ? "ring-2 ring-[var(--acc-0)]" : ""
-                          } ${item.type === "note" ? `note-${item.color}` : ""}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                              {item.type === "note" ? "Note" : "Image"}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              {item.type === "note" ? (
-                                <div className="flex items-center gap-1">
-                                  {NOTE_COLORS.map((color) => (
-                                    <button
-                                      key={color}
-                                      type="button"
-                                      className={`h-3 w-3 rounded-full border border-[var(--border)] note-${color}`}
-                                      onClick={() =>
+                        Add Note
+                      </SecondaryButton>
+                      <SecondaryButton
+                        type="button"
+                        className="w-auto px-4 py-2"
+                        onClick={() =>
+                          actions.setBrainDumpGrid(mode, {
+                            snapToGrid: !board.snapToGrid,
+                          })
+                        }
+                      >
+                        Snap {board.snapToGrid ? "On" : "Off"}
+                      </SecondaryButton>
+                      <SecondaryButton
+                        type="button"
+                        className="w-auto px-4 py-2"
+                        onClick={() => setDrawMode((prev) => !prev)}
+                      >
+                        Doodle {drawMode ? "On" : "Off"}
+                      </SecondaryButton>
+                      <SecondaryButton
+                        type="button"
+                        className="w-auto px-4 py-2"
+                        onClick={() => actions.setBrainDumpDoodle(mode, null)}
+                      >
+                        Clear Doodle
+                      </SecondaryButton>
+                      <SecondaryButton
+                        type="button"
+                        className="w-auto px-4 py-2"
+                        onClick={exportPng}
+                      >
+                        Export PNG
+                      </SecondaryButton>
+                      <SecondaryButton
+                        type="button"
+                        className="w-auto px-4 py-2"
+                        onClick={exportPdf}
+                      >
+                        Export PDF
+                      </SecondaryButton>
+                    </div>
+                  </div>
+                </GlassCard>
+              </StaggerItem>
+
+              <StaggerItem>
+                <div className="relative flex flex-1">
+                  <BrainDumpCanvas
+                    ref={containerRef}
+                    onWheel={handleWheel}
+                    onPointerEnter={() => setIsPointerInside(true)}
+                    onPointerLeave={(event) => {
+                      setIsPointerInside(false);
+                      if (drawMode) {
+                        endDoodle();
+                      }
+                      if (draggingGroup) {
+                        applySnapToSelection(draggingGroup.ids);
+                      }
+                      setPanning(null);
+                      setDraggingGroup(null);
+                      setResizing(null);
+                      try {
+                        containerRef.current?.releasePointerCapture(event.pointerId);
+                      } catch {
+                        // ignore if capture was not set
+                      }
+                      endInteraction();
+                    }}
+                    onPointerDown={(event) => {
+                      beginInteraction(event);
+                      if (drawMode) {
+                        startDoodle(event.clientX, event.clientY);
+                        return;
+                      }
+                      const target = event.target as HTMLElement;
+                      if (
+                        target.dataset.handle === "resize" ||
+                        target.closest('[data-item="true"]')
+                      ) {
+                        return;
+                      }
+                      setSelectedIds([]);
+                      setPanning({
+                        startX: event.clientX,
+                        startY: event.clientY,
+                        originX: board.camera.x,
+                        originY: board.camera.y,
+                      });
+                    }}
+                    onPointerMove={(event) => {
+                      if (drawMode) {
+                        drawDoodle(event.clientX, event.clientY);
+                        return;
+                      }
+                      if (resizing) {
+                        const point = screenToBoard(event.clientX, event.clientY);
+                        const nextWidth = clamp(
+                          resizing.startWidth + (point.x - resizing.startPoint.x),
+                          140,
+                          620,
+                        );
+                        const nextHeight = clamp(
+                          resizing.startHeight + (point.y - resizing.startPoint.y),
+                          120,
+                          620,
+                        );
+                        actions.updateBrainDumpBoardItem(mode, resizing.id, {
+                          width: snapValue(nextWidth),
+                          height: snapValue(nextHeight),
+                        });
+                      } else if (draggingGroup) {
+                        const point = screenToBoard(event.clientX, event.clientY);
+                        const dx = point.x - draggingGroup.startPoint.x;
+                        const dy = point.y - draggingGroup.startPoint.y;
+                        draggingGroup.ids.forEach((id) => {
+                          const start = draggingGroup.positions[id];
+                          actions.updateBrainDumpBoardItem(mode, id, {
+                            x: start.x + dx,
+                            y: start.y + dy,
+                          });
+                        });
+                      } else if (panning) {
+                        const dx = event.clientX - panning.startX;
+                        const dy = event.clientY - panning.startY;
+                        actions.setBrainDumpCamera(mode, {
+                          x: panning.originX + dx,
+                          y: panning.originY + dy,
+                          zoom: board.camera.zoom,
+                        });
+                      }
+                    }}
+                    onPointerUp={(event) => {
+                      if (drawMode) {
+                        endDoodle();
+                        try {
+                          containerRef.current?.releasePointerCapture(event.pointerId);
+                        } catch {
+                          // ignore if capture was not set
+                        }
+                        endInteraction();
+                        return;
+                      }
+                      if (draggingGroup) {
+                        applySnapToSelection(draggingGroup.ids);
+                      }
+                      setPanning(null);
+                      setDraggingGroup(null);
+                      setResizing(null);
+                      try {
+                        containerRef.current?.releasePointerCapture(event.pointerId);
+                      } catch {
+                        // ignore if capture was not set
+                      }
+                      endInteraction();
+                    }}
+                    className={`glass-panel relative h-full w-full overflow-hidden rounded-[var(--r-lg)] ${
+                      board.snapToGrid ? "brain-grid" : ""
+                    } ${isInteracting ? "cursor-grabbing" : "cursor-grab"}`}
+                    style={{ touchAction: "none" }}
+                  >
+                    <div className="pointer-events-none absolute left-0 top-0 h-full w-full" />
+                    <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--glass)] px-2 py-2 shadow-[var(--shadow-0)]">
+                      <button
+                        type="button"
+                        onClick={() => zoomBy(0.1)}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-sm text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
+                        aria-label="Zoom in"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => zoomBy(-0.1)}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-sm text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
+                        aria-label="Zoom out"
+                      >
+                        –
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetView}
+                        className="px-3 text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-1)] transition hover:text-[var(--text-0)]"
+                        aria-label="Reset view"
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => actions.setBrainDumpCamera(mode, fitBoardToView())}
+                        className="px-3 text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-1)] transition hover:text-[var(--text-0)]"
+                        aria-label="Fit to content"
+                      >
+                        Fit
+                      </button>
+                    </div>
+                    <div ref={boardSurfaceRef} className="absolute inset-0">
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background:
+                            "radial-gradient(circle at 20% 20%, rgba(118,255,43,0.08), transparent 40%), radial-gradient(circle at 80% 10%, rgba(118,255,43,0.08), transparent 45%)",
+                        }}
+                      />
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          transform: `translate(${board.camera.x}px, ${board.camera.y}px) scale(${board.camera.zoom})`,
+                          transformOrigin: "0 0",
+                        }}
+                      >
+                        <canvas
+                          ref={doodleCanvasRef}
+                          className="absolute left-0 top-0"
+                          style={{ width: DOODLE_WIDTH, height: DOODLE_HEIGHT }}
+                        />
+                        <AnimatePresence initial={false}>
+                          {items.map((item) => {
+                            const isSelected = selectedSet.has(item.id);
+                            return (
+                              <motion.div
+                                key={item.id}
+                                data-item="true"
+                                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
+                                transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
+                                style={{
+                                  position: "absolute",
+                                  left: item.x,
+                                  top: item.y,
+                                  width: item.width,
+                                  height: item.height,
+                                  zIndex: item.zIndex,
+                                }}
+                                onPointerDown={(event) => {
+                                  beginInteraction(event);
+                                  event.stopPropagation();
+                                  const additive =
+                                    event.shiftKey || event.metaKey || event.ctrlKey;
+                                  const nextSelected = additive
+                                    ? selectedSet.has(item.id)
+                                      ? selectedIds.filter((entry) => entry !== item.id)
+                                      : [...selectedIds, item.id]
+                                    : [item.id];
+                                  setSelectedIds(nextSelected);
+                                  const point = screenToBoard(event.clientX, event.clientY);
+                                  const ids =
+                                    nextSelected.length > 0 ? nextSelected : [item.id];
+                                  const positions = ids.reduce<
+                                    Record<string, { x: number; y: number }>
+                                  >((acc, id) => {
+                                    const entry = items.find((node) => node.id === id);
+                                    if (entry) {
+                                      acc[id] = { x: entry.x, y: entry.y };
+                                    }
+                                    return acc;
+                                  }, {});
+                                  setDraggingGroup({
+                                    ids,
+                                    startPoint: point,
+                                    positions,
+                                  });
+                                  actions.updateBrainDumpBoardItem(mode, item.id, {
+                                    zIndex: maxZ + 1,
+                                  });
+                                }}
+                                className="group relative"
+                              >
+                                <div
+                                  className={`glass-panel-opaque flex h-full w-full flex-col gap-2 rounded-[var(--r-md)] p-3 ${
+                                    isSelected ? "ring-2 ring-[var(--acc-0)]" : ""
+                                  } ${item.type === "note" ? `note-${item.color}` : ""}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                                      {item.type === "note" ? "Note" : "Image"}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      {item.type === "note" ? (
+                                        <div className="flex items-center gap-1">
+                                          {NOTE_COLORS.map((color) => (
+                                            <button
+                                              key={color}
+                                              type="button"
+                                              className={`h-3 w-3 rounded-full border border-[var(--border)] note-${color}`}
+                                              onClick={() =>
+                                                actions.updateBrainDumpBoardItem(mode, item.id, {
+                                                  color,
+                                                })
+                                              }
+                                            />
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          actions.deleteBrainDumpBoardItem(mode, item.id)
+                                        }
+                                        className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {item.type === "note" ? (
+                                    <textarea
+                                      value={item.text ?? ""}
+                                      onChange={(event) =>
                                         actions.updateBrainDumpBoardItem(mode, item.id, {
-                                          color,
+                                          text: event.target.value,
                                         })
                                       }
+                                      className="h-full w-full resize-none bg-transparent text-sm text-[var(--text-0)] outline-none"
                                     />
-                                  ))}
+                                  ) : (
+                                    <img
+                                      src={item.imageDataUrl}
+                                      alt="Brain dump item"
+                                      className="h-full w-full rounded-[var(--r-sm)] object-cover"
+                                    />
+                                  )}
+                                  <div
+                                    data-handle="resize"
+                                    onPointerDown={(event) => {
+                                      beginInteraction(event);
+                                      event.stopPropagation();
+                                      setResizing({
+                                        id: item.id,
+                                        startPoint: screenToBoard(event.clientX, event.clientY),
+                                        startWidth: item.width,
+                                        startHeight: item.height,
+                                      });
+                                    }}
+                                    className="absolute bottom-2 right-2 h-3 w-3 cursor-se-resize rounded-full border border-[var(--border)] bg-[var(--glass-2)]"
+                                  />
                                 </div>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => actions.deleteBrainDumpBoardItem(mode, item.id)}
-                                className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                          {item.type === "note" ? (
-                            <textarea
-                              value={item.text ?? ""}
-                              onChange={(event) =>
-                                actions.updateBrainDumpBoardItem(mode, item.id, {
-                                  text: event.target.value,
-                                })
-                              }
-                              className="h-full w-full resize-none bg-transparent text-sm text-[var(--text-0)] outline-none"
-                            />
-                          ) : (
-                            <img
-                              src={item.imageDataUrl}
-                              alt="Brain dump item"
-                              className="h-full w-full rounded-[var(--r-sm)] object-cover"
-                            />
-                          )}
-                          <div
-                            data-handle="resize"
-                            onPointerDown={(event) => {
-                              event.stopPropagation();
-                              setResizing({
-                                id: item.id,
-                                startPoint: screenToBoard(event.clientX, event.clientY),
-                                startWidth: item.width,
-                                startHeight: item.height,
-                              });
-                            }}
-                            className="absolute bottom-2 right-2 h-3 w-3 cursor-se-resize rounded-full border border-[var(--border)] bg-[var(--glass-2)]"
-                          />
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                  </AnimatePresence>
+                              </motion.div>
+                            );
+                          })}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  </BrainDumpCanvas>
                 </div>
-              </div>
+              </StaggerItem>
             </div>
-          </StaggerItem>
-          </div>
-        </StaggerContainer>
+          </StaggerContainer>
+        </div>
+      </div>
       </PageTransition>
 
       <AnimatePresence>
