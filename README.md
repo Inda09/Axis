@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Axis
 
-## Getting Started
+Axis is a single-user, premium time regulation system for work and home. It adapts to variable schedules, enforces breaks and lunch intelligently, and logs reality without judgement.
 
-First, run the development server:
+## Core Logic
+
+- Sessions are the source of truth. Only one session runs at a time; starting a new one auto-closes the current session with `source = auto_closed`.
+- Sessions are stored in `localStorage` (no backend). Reloading keeps the running session active.
+- Work and Home modes are fully separated and filtered throughout the UI.
+- Undo restores the most recent auto-close state.
+
+## Scheduling Rules (Work Mode)
+
+- Workday range is derived from the weekly schedule.
+- Lunch is required when planned work duration is at least 6 hours.
+- Short break targets scale with planned duration:
+  - ~4h day → 1 break
+  - ~8h day → 2 breaks + lunch
+  - ~9.5–10h day → 3 breaks + lunch
+- Breaks are spaced roughly every 90 minutes.
+- Lunch is placed near the midpoint of the day.
+- Busy blocks move suggestions:
+  - If overlapping, suggestions try the nearest free gap within ±20 minutes.
+  - Otherwise, they move forward to the next available gap.
+
+## Running Locally
 
 ```bash
+cd /Users/briancumming/Desktop/Axis
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a `.env.local` with:
 
-## Learn More
+```
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Supabase setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Run:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+npm run setup:supabase
+```
 
-## Deploy on Vercel
+Restart your dev server and confirm `/login` loads.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy to Vercel
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Push this repo to GitHub.
+2. Import the repo into Vercel.
+3. Set these environment variables (Production + Preview):
+   - NEXT_PUBLIC_SUPABASE_URL=https://obtwaplzyawlvnnocsbk.supabase.co
+   - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_jDjhdzFZ8u4quk2uCmTavw_F5QGXp2-
+4. Deploy and open the Vercel URL.

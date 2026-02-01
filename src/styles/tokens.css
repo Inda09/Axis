@@ -1,0 +1,25 @@
+:root {
+  --bg-0: #07080a;
+  --bg-1: #0b0d10;
+  --bg-2: #11151b;
+
+  --text-0: #f2f6fa;
+  --text-1: #b9c2ce;
+  --text-2: #7e8a99;
+
+  --acc-0: #76ff2b;
+  --acc-1: #b9ff7a;
+
+  --glass: rgba(255, 255, 255, 0.06);
+  --glass-2: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-2: rgba(118, 255, 43, 0.22);
+
+  --shadow-0: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --shadow-1: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  --glow: 0 0 24px rgba(118, 255, 43, 0.22);
+
+  --r-lg: 18px;
+  --r-md: 14px;
+  --r-sm: 12px;
+}
