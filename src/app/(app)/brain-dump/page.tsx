@@ -538,7 +538,7 @@ export default function BrainDumpPage() {
                 setDraggingGroup(null);
                 setResizing(null);
               }}
-              className={`glass-panel relative h-[70vh] overflow-hidden rounded-[var(--r-lg)] ${
+              className={`glass-panel relative h-[70vh] w-full overflow-hidden rounded-[var(--r-lg)] sm:h-[72vh] lg:h-[75vh] xl:h-[78vh] ${
                 board.snapToGrid ? "brain-grid" : ""
               }`}
             >

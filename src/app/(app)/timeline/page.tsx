@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { PageTransition } from "@/components/page-transition";
@@ -21,12 +21,23 @@ export default function TimelinePage() {
   const date = useMemo(() => new Date(selectedDate), [selectedDate]);
   const { daySessions, totals, runningSession } = useDaySessions(date, mode);
 
-  const height = 780;
+  const [height, setHeight] = useState(720);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      const viewport = window.innerHeight;
+      const nextHeight = Math.max(700, Math.min(980, viewport - 320));
+      setHeight(nextHeight);
+    };
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    return () => window.removeEventListener("resize", updateHeight);
+  }, []);
 
   return (
     <PageTransition>
       <StaggerContainer>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 lg:gap-8">
           <StaggerItem>
             <GlassCard className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-3">

@@ -132,221 +132,212 @@ export default function TodayPage() {
     <>
       <PageTransition>
         <StaggerContainer>
-          <div className="flex flex-col gap-6">
-          <StaggerItem>
-            <div className="flex flex-col gap-3">
-              <ModeToggle value={mode} onChange={actions.setMode} />
-              <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--text-1)]">
-                <span className="text-base font-semibold text-[var(--text-0)]">
-                  {now ? formatDate(now) : "—"}
-                </span>
-                {workHours ? (
-                  <span className="rounded-full border border-[var(--border)] px-3 py-1 text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                    {workHours}
+          <div className="flex flex-col gap-6 lg:gap-8">
+            <StaggerItem>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <ModeToggle value={mode} onChange={actions.setMode} />
+                <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--text-1)]">
+                  <span className="text-base font-semibold text-[var(--text-0)]">
+                    {now ? formatDate(now) : "—"}
                   </span>
+                  {workHours ? (
+                    <span className="rounded-full border border-[var(--border)] px-3 py-1 text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                      {workHours}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </StaggerItem>
+
+            <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+              <div className="flex flex-col gap-6">
+                {currentSession ? (
+                  <StaggerItem>
+                    <GlassCard className="glass-panel-strong flex flex-col items-center gap-6 py-8 lg:py-10">
+                      <TimerRing
+                        startTime={currentSession.startTime}
+                        intendedMinutes={currentSession.intendedMinutes}
+                        label={getSessionLabel(currentSession.type)}
+                        isRunning
+                        emphasisLabel={currentSession.type !== "focus"}
+                      />
+                      <div className="grid w-full gap-3 sm:grid-cols-2">
+                        <SecondaryButton onClick={actions.endSession} type="button">
+                          End Session
+                        </SecondaryButton>
+                        <SecondaryButton
+                          onClick={actions.undoLastAction}
+                          type="button"
+                          disabled={!undoState}
+                          className={!undoState ? "opacity-40" : ""}
+                        >
+                          Undo Last Action
+                        </SecondaryButton>
+                      </div>
+                      <SecondaryButton type="button" onClick={() => setIsFullScreen(true)}>
+                        Full Screen
+                      </SecondaryButton>
+                    </GlassCard>
+                  </StaggerItem>
+                ) : null}
+
+                <StaggerItem>
+                  <GlassCard className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-col">
+                      <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                        Status
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--text-0)]">
+                        {currentSession
+                          ? `${getSessionLabel(currentSession.type)} running`
+                          : "No session running"}
+                      </p>
+                    </div>
+                    {currentSession ? (
+                      <div className="text-right">
+                        <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                          Started
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-[var(--text-0)]">
+                          {formatTime(new Date(currentSession.startTime))}
+                        </p>
+                      </div>
+                    ) : null}
+                  </GlassCard>
+                </StaggerItem>
+
+                {mode === "work" && nextSuggestion ? (
+                  <StaggerItem>
+                    <div className="inline-flex items-center gap-3 rounded-full border border-[var(--border-2)] bg-[var(--glass)] px-4 py-2 text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-1)] shadow-[var(--shadow-0)]">
+                      <span className="h-2 w-2 rounded-full bg-[var(--acc-0)] shadow-[var(--glow)]" />
+                      Next {getSessionLabel(nextSuggestion.type)} at{" "}
+                      {formatTime(new Date(nextSuggestion.startTime))}
+                    </div>
+                  </StaggerItem>
+                ) : null}
+
+                <StaggerItem>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <PrimaryButton onClick={() => handleStart("focus")} type="button">
+                      Start Focus
+                    </PrimaryButton>
+                    <SecondaryButton onClick={() => handleStart("short_break")} type="button">
+                      Short Break
+                    </SecondaryButton>
+                    <SecondaryButton onClick={() => handleStart("lunch")} type="button">
+                      Lunch
+                    </SecondaryButton>
+                    <SecondaryButton onClick={() => handleStart("task_break")} type="button">
+                      Task Break
+                    </SecondaryButton>
+                  </div>
+                </StaggerItem>
+
+                {mode === "work" ? (
+                  <StaggerItem>
+                    <GlassCard className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                          Busy Blocks
+                        </p>
+                        <Link
+                          href="/calls"
+                          className="text-[0.6rem] font-semibold uppercase tracking-[0.3em] text-[var(--acc-0)]"
+                        >
+                          Add Call
+                        </Link>
+                      </div>
+                      {todayBusyBlocks.length === 0 ? (
+                        <p className="text-sm text-[var(--text-2)]">No calls logged today.</p>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {todayBusyBlocks.map((block) => (
+                            <div
+                              key={block.id}
+                              className="flex items-center justify-between rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-2 text-[0.7rem] text-[var(--text-1)]"
+                            >
+                              <span>{block.title}</span>
+                              <span>
+                                {formatTime(new Date(block.startTime))}–
+                                {formatTime(new Date(block.endTime))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </GlassCard>
+                  </StaggerItem>
                 ) : null}
               </div>
-            </div>
-          </StaggerItem>
 
-          {currentSession ? (
-            <StaggerItem>
-              <GlassCard className="glass-panel-strong flex flex-col items-center gap-6 py-8">
-                <TimerRing
-                  startTime={currentSession.startTime}
-                  intendedMinutes={currentSession.intendedMinutes}
-                  label={getSessionLabel(currentSession.type)}
-                  isRunning
-                  emphasisLabel={currentSession.type !== "focus"}
-                />
-                <div className="grid w-full gap-3 sm:grid-cols-2">
-                  <SecondaryButton onClick={actions.endSession} type="button">
-                    End Session
-                  </SecondaryButton>
-                  <SecondaryButton
-                    onClick={actions.undoLastAction}
-                    type="button"
-                    disabled={!undoState}
-                    className={!undoState ? "opacity-40" : ""}
-                  >
-                    Undo Last Action
-                  </SecondaryButton>
-                </div>
-                <SecondaryButton
-                  type="button"
-                  onClick={() => setIsFullScreen(true)}
-                >
-                  Full Screen
-                </SecondaryButton>
-              </GlassCard>
-            </StaggerItem>
-          ) : null}
+              <div className="flex flex-col gap-6">
+                <StaggerItem>
+                  <GlassCard className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                        Focus Time
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-0)]">
+                        {Math.round(totals.focusMinutes)}m
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                        Break Time
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-0)]">
+                        {Math.round(totals.breakMinutes)}m
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                        Break Count
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text-0)]">
+                        {totals.breakCount}
+                      </p>
+                    </div>
+                  </GlassCard>
+                </StaggerItem>
 
-          <StaggerItem>
-            <GlassCard className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-col">
-                <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                  Status
-                </p>
-                <p className="mt-1 text-sm font-semibold text-[var(--text-0)]">
-                  {currentSession
-                    ? `${getSessionLabel(currentSession.type)} running`
-                    : "No session running"}
-                </p>
-              </div>
-              {currentSession ? (
-                <div className="text-right">
-                  <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                    Started
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-[var(--text-0)]">
-                    {formatTime(new Date(currentSession.startTime))}
-                  </p>
-                </div>
-              ) : null}
-            </GlassCard>
-          </StaggerItem>
-
-          {mode === "work" && nextSuggestion ? (
-            <StaggerItem>
-              <div className="inline-flex items-center gap-3 rounded-full border border-[var(--border-2)] bg-[var(--glass)] px-4 py-2 text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-1)] shadow-[var(--shadow-0)]">
-                <span className="h-2 w-2 rounded-full bg-[var(--acc-0)] shadow-[var(--glow)]" />
-                Next {getSessionLabel(nextSuggestion.type)} at{" "}
-                {formatTime(new Date(nextSuggestion.startTime))}
-              </div>
-            </StaggerItem>
-          ) : null}
-
-          <StaggerItem>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <PrimaryButton
-                onClick={() => handleStart("focus")}
-                type="button"
-              >
-                Start Focus
-              </PrimaryButton>
-              <SecondaryButton
-                onClick={() => handleStart("short_break")}
-                type="button"
-              >
-                Short Break
-              </SecondaryButton>
-              <SecondaryButton
-                onClick={() => handleStart("lunch")}
-                type="button"
-              >
-                Lunch
-              </SecondaryButton>
-              <SecondaryButton
-                onClick={() => handleStart("task_break")}
-                type="button"
-              >
-                Task Break
-              </SecondaryButton>
-            </div>
-          </StaggerItem>
-
-          {mode === "work" ? (
-            <StaggerItem>
-              <GlassCard className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                    Busy Blocks
-                  </p>
-                  <Link
-                    href="/calls"
-                    className="text-[0.6rem] font-semibold uppercase tracking-[0.3em] text-[var(--acc-0)]"
-                  >
-                    Add Call
-                  </Link>
-                </div>
-                {todayBusyBlocks.length === 0 ? (
-                  <p className="text-sm text-[var(--text-2)]">No calls logged today.</p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {todayBusyBlocks.map((block) => (
-                      <div
-                        key={block.id}
-                        className="flex items-center justify-between rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-2 text-[0.7rem] text-[var(--text-1)]"
+                <StaggerItem>
+                  <GlassCard className="flex flex-col gap-4">
+                    <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                      Workspace
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Link
+                        href="/tasks"
+                        className="glass-panel flex items-center justify-between rounded-[var(--r-md)] px-4 py-4 text-sm font-semibold text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
                       >
-                        <span>{block.title}</span>
-                        <span>
-                          {formatTime(new Date(block.startTime))}–
-                          {formatTime(new Date(block.endTime))}
+                        Tasks & Priorities
+                        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                          Open
                         </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </GlassCard>
-            </StaggerItem>
-          ) : null}
-
-          <StaggerItem>
-            <GlassCard className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                  Focus Time
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--text-0)]">
-                  {Math.round(totals.focusMinutes)}m
-                </p>
+                      </Link>
+                      <Link
+                        href="/notes"
+                        className="glass-panel flex items-center justify-between rounded-[var(--r-md)] px-4 py-4 text-sm font-semibold text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
+                      >
+                        Notes & Brain Dump
+                        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                          Open
+                        </span>
+                      </Link>
+                      <Link
+                        href="/brain-dump"
+                        className="glass-panel flex items-center justify-between rounded-[var(--r-md)] px-4 py-4 text-sm font-semibold text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
+                      >
+                        Brain Dump Board
+                        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
+                          Open
+                        </span>
+                      </Link>
+                    </div>
+                  </GlassCard>
+                </StaggerItem>
               </div>
-              <div>
-                <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                  Break Time
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--text-0)]">
-                  {Math.round(totals.breakMinutes)}m
-                </p>
-              </div>
-              <div>
-                <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                  Break Count
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--text-0)]">
-                  {totals.breakCount}
-                </p>
-              </div>
-            </GlassCard>
-          </StaggerItem>
-
-          <StaggerItem>
-            <GlassCard className="flex flex-col gap-4">
-              <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                Workspace
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Link
-                  href="/tasks"
-                  className="glass-panel flex items-center justify-between rounded-[var(--r-md)] px-4 py-4 text-sm font-semibold text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
-                >
-                  Tasks & Priorities
-                  <span className="text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                    Open
-                  </span>
-                </Link>
-                <Link
-                  href="/notes"
-                  className="glass-panel flex items-center justify-between rounded-[var(--r-md)] px-4 py-4 text-sm font-semibold text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
-                >
-                  Notes & Brain Dump
-                  <span className="text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                    Open
-                  </span>
-                </Link>
-                <Link
-                  href="/brain-dump"
-                  className="glass-panel flex items-center justify-between rounded-[var(--r-md)] px-4 py-4 text-sm font-semibold text-[var(--text-0)] transition hover:shadow-[var(--glow)]"
-                >
-                  Brain Dump Board
-                  <span className="text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
-                    Open
-                  </span>
-                </Link>
-              </div>
-            </GlassCard>
-          </StaggerItem>
+            </div>
           </div>
         </StaggerContainer>
       </PageTransition>

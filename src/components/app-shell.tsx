@@ -26,7 +26,7 @@ const desktopLinks = [
   { label: "Insights", href: "/insights" },
 ];
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function DesktopAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
@@ -40,36 +40,40 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ToastProvider>
         <ErrorLogListener />
         <TimerEngine />
-        <div className="flex min-h-screen flex-col px-5 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[calc(1.5rem+env(safe-area-inset-top))] sm:px-10 sm:pb-10">
-          <header className="mx-auto flex w-full max-w-[680px] items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative flex h-4 w-4 items-center justify-center">
-                <SpinningHalo size={18} thickness={3} />
-                <div className="relative z-10 h-2 w-2 rounded-full bg-[var(--acc-0)] shadow-[var(--glow)]" />
+        <div className="flex min-h-screen flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[calc(1.5rem+env(safe-area-inset-top))] sm:pb-10">
+          <header className="w-full">
+            <div className="mx-auto flex w-full max-w-screen-sm items-center justify-between px-4 sm:px-6 md:max-w-screen-lg lg:max-w-[1200px] lg:px-8 xl:max-w-[1400px]">
+              <div className="flex items-center gap-3">
+                <div className="relative flex h-4 w-4 items-center justify-center">
+                  <SpinningHalo size={18} thickness={3} />
+                  <div className="relative z-10 h-2 w-2 rounded-full bg-[var(--acc-0)] shadow-[var(--glow)]" />
+                </div>
+                <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--text-0)]">
+                  {APP_NAME}
+                </p>
               </div>
-              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--text-0)]">
-                {APP_NAME}
-              </p>
+              <nav className="hidden items-center gap-6 text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)] md:flex lg:gap-8">
+                {desktopLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={cn(
+                      "transition hover:text-[var(--text-0)]",
+                      pathname === link.href && "text-[var(--text-0)]",
+                    )}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
             </div>
-            <nav className="hidden items-center gap-6 text-[0.65rem] uppercase tracking-[0.3em] text-[var(--text-2)] sm:flex">
-              {desktopLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "transition hover:text-[var(--text-0)]",
-                    pathname === link.href && "text-[var(--text-0)]",
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
           </header>
-          <main className="mx-auto mt-8 flex w-full max-w-[680px] flex-1 flex-col">
-            <AnimatePresence mode="wait" initial={false}>
-              <div key={pathname}>{children}</div>
-            </AnimatePresence>
+          <main className="flex-1">
+            <div className="mx-auto mt-8 w-full max-w-screen-sm px-4 sm:px-6 md:max-w-screen-lg lg:max-w-[1200px] lg:px-8 xl:max-w-[1400px]">
+              <AnimatePresence mode="wait" initial={false}>
+                <div key={pathname}>{children}</div>
+              </AnimatePresence>
+            </div>
           </main>
           <BottomNav />
         </div>
@@ -77,3 +81,5 @@ export function AppShell({ children }: { children: ReactNode }) {
     </AxisStoreProvider>
   );
 }
+
+export const AppShell = DesktopAppShell;

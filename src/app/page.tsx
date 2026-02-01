@@ -3,64 +3,46 @@
 import Link from "next/link";
 import { LandingHeroRing } from "@/components/landing/LandingHeroRing";
 import { GlassCard } from "@/components/ui/glass-card";
-import { PrimaryButton, SecondaryButton, IconButton } from "@/components/ui/buttons";
-import { useSession } from "@/lib/auth/useSession";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/buttons";
 import { APP_NAME } from "@/lib/constants";
 
 export default function LandingPage() {
-  const { session, user } = useSession();
-
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[900px] flex-col px-6 pb-16 pt-8">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-2 w-2 rounded-full bg-[var(--acc-0)] shadow-[var(--glow)]" />
-          <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--text-0)]">
-            {APP_NAME}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {session ? (
-            <>
-              <Link href="/today">
-                <PrimaryButton className="w-auto px-4 py-2 text-[0.6rem]">
-                  Open Axis
-                </PrimaryButton>
-              </Link>
-              <IconButton
-                type="button"
-                aria-label="Sign out"
-                onClick={() => supabase?.auth.signOut()}
-                disabled={!isSupabaseConfigured}
-              >
-                {user?.email?.charAt(0).toUpperCase() ?? "U"}
-              </IconButton>
-            </>
-          ) : (
-            <Link href="/login">
-              <SecondaryButton className="w-auto px-4 py-2 text-[0.6rem]">
-                Sign in
-              </SecondaryButton>
-            </Link>
-          )}
+    <div className="flex min-h-screen flex-col">
+      <header className="w-full">
+        <div className="mx-auto flex w-full max-w-screen-xl items-center justify-between px-6 pt-8 sm:px-8">
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-[var(--acc-0)] shadow-[var(--glow)]" />
+            <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--text-0)]">
+              {APP_NAME}
+            </p>
+          </div>
+          <Link href="/login">
+            <SecondaryButton className="w-auto px-4 py-2 text-[0.6rem]">
+              Sign in
+            </SecondaryButton>
+          </Link>
         </div>
       </header>
 
-      <main className="mt-14 flex flex-col items-center gap-10 text-center">
+      <main className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col items-center justify-center gap-12 px-6 pb-16 pt-10 text-center sm:px-8">
         <div className="flex flex-col items-center gap-4">
-          <h1 className="text-4xl font-semibold text-[var(--text-0)] sm:text-5xl">
+          <h1 className="text-4xl font-semibold text-[var(--text-0)] sm:text-5xl lg:text-6xl">
             Axis
           </h1>
-          <p className="text-sm uppercase tracking-[0.35em] text-[var(--text-2)]">
+          <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-2)] sm:text-sm lg:text-base">
             Time regulation for focus, breaks, and recovery.
           </p>
         </div>
 
-        <GlassCard className="glass-panel-strong flex w-full max-w-lg flex-col items-center gap-6 py-8">
-          <LandingHeroRing />
+        <GlassCard className="glass-panel-strong flex w-full max-w-xl flex-col items-center gap-8 py-10 lg:max-w-2xl">
+          <div className="flex items-center justify-center">
+            <div className="scale-90 sm:scale-100 lg:scale-[1.1] xl:scale-[1.2]">
+              <LandingHeroRing />
+            </div>
+          </div>
           <div className="grid w-full gap-3 sm:grid-cols-2">
-            <Link href={session ? "/today" : "/login"} className="w-full">
+            <Link href="/today" className="w-full">
               <PrimaryButton type="button">Open Axis</PrimaryButton>
             </Link>
             <Link href="/signup" className="w-full">

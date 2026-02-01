@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/buttons";
@@ -9,7 +8,6 @@ import { useToasts } from "@/components/ui/toasts";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default function SignupPage() {
-  const router = useRouter();
   const { pushToast } = useToasts();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,9 +20,14 @@ export default function SignupPage() {
       return;
     }
     setLoading(true);
+    const emailRedirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/login?confirmed=true`
+        : undefined;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: emailRedirectTo ? { emailRedirectTo } : undefined,
     });
     setLoading(false);
     if (error) {
@@ -32,23 +35,25 @@ export default function SignupPage() {
       return;
     }
     if (data.session) {
-      router.push("/today");
-    } else {
-      setNeedsConfirmation(true);
+      await supabase.auth.signOut();
     }
+    setNeedsConfirmation(true);
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <GlassCard className="glass-panel-strong w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center px-6 sm:px-10">
+      <GlassCard className="glass-panel-strong w-full max-w-[520px]">
         <div className="flex flex-col gap-4">
           <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--text-2)]">
             Create account
           </p>
           {needsConfirmation ? (
-            <p className="text-sm text-[var(--text-1)]">
-              Check your email to confirm your account.
-            </p>
+            <div className="flex flex-col gap-2 text-sm text-[var(--text-1)]">
+              <p>Check your email to confirm your account.</p>
+              <p className="text-[0.7rem] uppercase tracking-[0.28em] text-[var(--text-2)]">
+                You can sign in after confirmation.
+              </p>
+            </div>
           ) : (
             <>
               <input
