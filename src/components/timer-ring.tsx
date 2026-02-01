@@ -11,6 +11,7 @@ type TimerRingProps = {
   label: string;
   isRunning: boolean;
   emphasisLabel?: boolean;
+  variant?: "live" | "ambient";
 };
 
 
@@ -20,24 +21,29 @@ function TimerRingBase({
   label,
   isRunning,
   emphasisLabel = false,
+  variant = "live",
 }: TimerRingProps) {
   const reduceMotion = useReducedMotion();
   const [now, setNow] = useState(() => Date.now());
+  const isAmbient = variant === "ambient";
 
   useEffect(() => {
-    if (!isRunning) {
+    if (!isRunning || isAmbient) {
       return;
     }
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, isAmbient]);
 
   const { elapsedSeconds, progress } = useMemo(() => {
+    if (isAmbient) {
+      return { elapsedSeconds: 0, progress: 0 };
+    }
     const elapsed = Math.max(0, Math.floor((now - new Date(startTime).getTime()) / 1000));
     const intendedSeconds = intendedMinutes * 60;
     const nextProgress = intendedSeconds > 0 ? Math.min(1, elapsed / intendedSeconds) : 0;
     return { elapsedSeconds: elapsed, progress: nextProgress };
-  }, [now, startTime, intendedMinutes]);
+  }, [now, startTime, intendedMinutes, isAmbient]);
 
   const hasTarget = intendedMinutes > 0;
   const radius = 110;
@@ -114,26 +120,34 @@ function TimerRingBase({
         <SpinningHalo size={280} thickness={12} className="opacity-70" />
       ) : null}
       <div className="absolute z-20 flex flex-col items-center text-center">
-        <p
-          className={
-            emphasisLabel
-              ? "text-sm font-semibold uppercase tracking-[0.36em] text-[var(--text-0)]"
-              : "text-[0.6rem] uppercase tracking-[0.32em] text-[var(--text-2)]"
-          }
-        >
-          {label}
-        </p>
-        <p className="mt-2 text-4xl font-semibold text-[var(--text-0)]">
-          {formatDurationSeconds(elapsedSeconds)}
-        </p>
-        {hasTarget ? (
-          <p className="mt-2 text-[0.6rem] uppercase tracking-[0.28em] text-[var(--text-2)]">
-            {intendedMinutes}m target
+        {isAmbient ? (
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.4em] text-[var(--text-0)]">
+            Axis
           </p>
         ) : (
-          <p className="mt-2 text-[0.6rem] uppercase tracking-[0.28em] text-[var(--text-2)]">
-            Open-ended
-          </p>
+          <>
+            <p
+              className={
+                emphasisLabel
+                  ? "text-sm font-semibold uppercase tracking-[0.36em] text-[var(--text-0)]"
+                  : "text-[0.6rem] uppercase tracking-[0.32em] text-[var(--text-2)]"
+              }
+            >
+              {label}
+            </p>
+            <p className="mt-2 text-4xl font-semibold text-[var(--text-0)]">
+              {formatDurationSeconds(elapsedSeconds)}
+            </p>
+            {hasTarget ? (
+              <p className="mt-2 text-[0.6rem] uppercase tracking-[0.28em] text-[var(--text-2)]">
+                {intendedMinutes}m target
+              </p>
+            ) : (
+              <p className="mt-2 text-[0.6rem] uppercase tracking-[0.28em] text-[var(--text-2)]">
+                Open-ended
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

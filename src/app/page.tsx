@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { TimerRing } from "@/components/timer-ring";
+import { LandingHeroRing } from "@/components/landing/LandingHeroRing";
 import { GlassCard } from "@/components/ui/glass-card";
 import { PrimaryButton, SecondaryButton, IconButton } from "@/components/ui/buttons";
 import { useSession } from "@/lib/auth/useSession";
@@ -11,11 +10,6 @@ import { APP_NAME } from "@/lib/constants";
 
 export default function LandingPage() {
   const { session, user } = useSession();
-  const [startTime, setStartTime] = useState<string | null>(null);
-
-  useEffect(() => {
-    setStartTime(new Date(Date.now() - 2 * 60 * 1000).toISOString());
-  }, []);
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[900px] flex-col px-6 pb-16 pt-8">
@@ -64,14 +58,7 @@ export default function LandingPage() {
         </div>
 
         <GlassCard className="glass-panel-strong flex w-full max-w-lg flex-col items-center gap-6 py-8">
-          {startTime ? (
-            <TimerRing
-              startTime={startTime}
-              intendedMinutes={60}
-              label="Focus"
-              isRunning
-            />
-          ) : null}
+          <LandingHeroRing />
           <div className="grid w-full gap-3 sm:grid-cols-2">
             <Link href={session ? "/today" : "/login"} className="w-full">
               <PrimaryButton type="button">Open Axis</PrimaryButton>
