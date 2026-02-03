@@ -17,6 +17,7 @@ import type {
   Task,
   TaskPriority,
   WorkSchedule,
+  Shift,
 } from "@/lib/models";
 import {
   DEFAULT_SETTINGS,
@@ -30,6 +31,8 @@ export type AxisState = {
   sessions: Session[];
   busyBlocks: BusyBlock[];
   workSchedule: WorkSchedule[];
+  shifts: Shift[];
+  currentShiftId: string | null;
   settings: AxisSettings;
   currentSessionId: string | null;
   tasks: Task[];
@@ -46,6 +49,8 @@ const defaultState: AxisState = {
   sessions: [],
   busyBlocks: [],
   workSchedule: DEFAULT_WORK_SCHEDULE,
+  shifts: [],
+  currentShiftId: null,
   settings: DEFAULT_SETTINGS,
   currentSessionId: null,
   tasks: [],
@@ -86,6 +91,8 @@ const getPersistedState = (nextState: AxisState) => ({
   sessions: nextState.sessions,
   busyBlocks: nextState.busyBlocks,
   workSchedule: nextState.workSchedule,
+  shifts: nextState.shifts,
+  currentShiftId: nextState.currentShiftId,
   settings: nextState.settings,
   currentSessionId: nextState.currentSessionId,
   tasks: nextState.tasks,
@@ -139,16 +146,29 @@ const closeSession = (source: SessionSource) =>
       undoState:
         source === "auto_closed"
           ? {
-              sessions: prev.sessions,
-              currentSessionId: prev.currentSessionId,
-            }
+            sessions: prev.sessions,
+            currentSessionId: prev.currentSessionId,
+          }
           : prev.undoState,
     };
   });
 
+const updateShift = (
+  nextState: AxisState,
+  shiftId: string,
+  updater: (shift: Shift) => Shift,
+) => ({
+  ...nextState,
+  shifts: nextState.shifts.map((shift) =>
+    shift.id === shiftId ? updater(shift) : shift
+  )
+});
+
 export const axisActions = {
   setMode(nextMode: Mode) {
     setState((prev) => {
+      // If we are clocking into a shift, maybe we change mode automatically?
+      // Logic for changing mode stays same
       if (prev.mode === nextMode) {
         return prev;
       }
@@ -175,7 +195,37 @@ export const axisActions = {
       return { ...prev, mode: nextMode };
     });
   },
-  startSession(type: SessionType) {
+  clockIn() {
+    setState((prev) => {
+      if (prev.currentShiftId) return prev; // Already clocked in
+      const now = new Date().toISOString();
+      const newShift: Shift = {
+        id: createId(),
+        mode: prev.mode,
+        startTime: now,
+        endTime: null,
+      };
+      return {
+        ...prev,
+        shifts: [...(prev.shifts || []), newShift],
+        currentShiftId: newShift.id,
+      };
+    });
+  },
+  clockOut() {
+    setState((prev) => {
+      if (!prev.currentShiftId) return prev;
+      const now = new Date().toISOString();
+      const nextState = updateShift(prev, prev.currentShiftId, (s) => ({
+        ...s, endTime: now
+      }));
+      return {
+        ...nextState,
+        currentShiftId: null,
+      };
+    });
+  },
+  startSession(type: SessionType, taskId?: string) {
     setState((prev) => {
       const now = new Date().toISOString();
       const modeSettings = prev.settings[prev.mode];
@@ -195,6 +245,7 @@ export const axisActions = {
         endTime: null,
         intendedMinutes,
         source: "manual",
+        taskId: taskId, // Assign task if provided
       };
       let nextState: AxisState = { ...prev };
       if (prev.currentSessionId) {
@@ -272,6 +323,8 @@ export const axisActions = {
       priority,
       createdAt: new Date().toISOString(),
       deferredUntil: null,
+      completed: false,
+      completedAt: null,
     };
     setState((prev) => ({ ...prev, tasks: [next, ...prev.tasks] }));
   },
@@ -287,11 +340,33 @@ export const axisActions = {
       tasks: prev.tasks.map((task) =>
         task.id === id
           ? {
-              ...task,
-              deferredUntil: new Date(
-                new Date().getTime() + 24 * 60 * 60 * 1000,
-              ).toISOString(),
-            }
+            ...task,
+            deferredUntil: new Date(
+              new Date().getTime() + 24 * 60 * 60 * 1000,
+            ).toISOString(),
+          }
+          : task,
+      ),
+    }));
+  },
+  updateTask(id: string, updates: Partial<Task>) {
+    setState((prev) => ({
+      ...prev,
+      tasks: prev.tasks.map((task) =>
+        task.id === id ? { ...task, ...updates } : task
+      ),
+    }));
+  },
+  toggleTaskCompletion(id: string) {
+    setState((prev) => ({
+      ...prev,
+      tasks: prev.tasks.map((task) =>
+        task.id === id
+          ? {
+            ...task,
+            completed: !task.completed,
+            completedAt: !task.completed ? new Date().toISOString() : null,
+          }
           : task,
       ),
     }));
@@ -453,6 +528,8 @@ export function hydrateAxisStore() {
       persisted.tasks?.map((task) => ({
         ...task,
         mode: task.mode ?? persisted.mode ?? "work",
+        completed: task.completed ?? false,
+        completedAt: task.completedAt ?? null,
       })) ?? [];
     const normalizedNotes: Record<string, DailyNotes> = {};
     Object.entries(persisted.notesByDay ?? {}).forEach(([key, value]) => {

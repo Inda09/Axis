@@ -11,6 +11,14 @@ export type Session = {
   endTime: string | null;
   intendedMinutes: number;
   source: SessionSource;
+  taskId?: string;
+};
+
+export type Shift = {
+  id: string;
+  mode: Mode;
+  startTime: string;
+  endTime: string | null;
 };
 
 export type BusyBlock = {
@@ -74,6 +82,8 @@ export type Task = {
   priority: TaskPriority;
   createdAt: string;
   deferredUntil: string | null;
+  completed: boolean;
+  completedAt: string | null;
 };
 
 export type DailyNotes = {

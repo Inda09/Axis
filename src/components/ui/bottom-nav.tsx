@@ -11,7 +11,6 @@ const navItems = [
   { label: "Tasks", href: "/tasks" },
   { label: "Brain", href: "/brain-dump" },
   { label: "Notes", href: "/notes" },
-  { label: "Logs", href: "/logs" },
   { label: "Calls", href: "/calls", workOnly: true },
   { label: "Timeline", href: "/timeline" },
   { label: "Insights", href: "/insights" },
